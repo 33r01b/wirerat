@@ -1,3 +1,3 @@
-# Dockrat
+# Wirerat
 
-Docker rat - сервис для прослушки трафика Docker контейнеров
+Wirerat - CLI for listening to traffic of Docker containers

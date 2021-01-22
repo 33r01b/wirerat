@@ -14,6 +14,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/knadh/koanf v0.15.0 // indirect
+	github.com/manifoldco/promptui v0.8.0
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/moby/term v0.0.0-20201216013528-df9cb8a40635 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect

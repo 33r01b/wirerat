@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"github.com/davecgh/go-spew/spew"
@@ -9,14 +8,11 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
+	"github.com/manifoldco/promptui"
 	"log"
 	"net"
-	"os"
-	"strconv"
 	"strings"
 )
-
-var containerNets []Container
 
 func main() {
 	ifaces, err := net.Interfaces()
@@ -25,12 +21,10 @@ func main() {
 		return
 	}
 
-	containerNets = containers()
+	containerNets := containers()
+	containersNames := make([]string, len(containerNets))
 
 	for i, container := range containerNets {
-		if container.Gateway == "" {
-			continue
-		}
 		//fmt.Printf("%+v\n", container.Names)
 		iface, err := findIfaceByIPV4(&ifaces, container.Gateway + "/16")
 		if err != nil {
@@ -38,21 +32,23 @@ func main() {
 		}
 
 		containerNets[i].Interface = &iface
-
-		fmt.Printf("[%d] \n name: %+v\n iface: %#v\n", i, container.Names, iface)
+		containersNames[i] = strings.Join(container.Names, ",")
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Choose container by name: ")
-	index, err := reader.ReadString('\n')
+	prompt := promptui.Select{
+		Label: "Choose container by name",
+		Items: containersNames,
+		Size: 10,
+	}
+
+	index, _, err := prompt.Run()
+
 	if err != nil {
-		panic(err)
+		fmt.Printf("Prompt failed %v\n", err)
+		return
 	}
 
-	containerIdx, err := strconv.ParseInt(strings.TrimSpace(index), 10, 64)
-	if err != nil {
-		panic(err)
-	}
+	containerIdx := int64(index)
 
 	// TODO use only filtered containers
 	if containerIdx > int64(len(containerNets)) {
@@ -61,9 +57,9 @@ func main() {
 
 	selectedContainer := containerNets[containerIdx]
 
-	fmt.Print("\n\n")
-	fmt.Printf("DONE!\n %#v", selectedContainer)
-
+	fmt.Printf("Names: %s\n", strings.Join(selectedContainer.Names, ","))
+	fmt.Printf("Gateway: %v\n", selectedContainer.Gateway)
+	fmt.Printf("LISTEN...\n\n")
 
 	sniff(selectedContainer.Interface)
 }
@@ -104,11 +100,12 @@ func containers() []Container {
 		panic(err)
 	}
 
-	containerNets := make([]Container, len(containers))
+	containerNets := make([]Container, 0)
 
 	for _, container := range containers {
 		nets := container.NetworkSettings.Networks[container.HostConfig.NetworkMode]
-		if nets != nil {
+
+		if nets != nil && nets.Gateway != "" {
 			containerNets = append(containerNets, Container{Names: container.Names, Gateway: nets.Gateway})
 		}
 	}
@@ -144,7 +141,8 @@ func sniff(iface *net.Interface) {
 	for packet := range source.Packets() {
 		harvestFTPCreds(packet)
 	}
-	
+
+	fmt.Println("Done...")
 }
 
 func harvestFTPCreds(packet gopacket.Packet) {

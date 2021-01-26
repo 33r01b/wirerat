@@ -14,6 +14,8 @@ import (
 	"strings"
 )
 
+const ContainersIpv4Mask string = "/16"
+
 func main() {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -22,17 +24,17 @@ func main() {
 	}
 
 	containerNets := containers()
-	containersNames := make([]string, len(containerNets))
+	containersNames := make([]string, 0, len(containerNets))
 
 	for i, container := range containerNets {
 		//fmt.Printf("%+v\n", container.Names)
-		iface, err := findIfaceByIPV4(&ifaces, container.Gateway + "/16")
+		iface, err := findIfaceByIPV4(&ifaces, container.Gateway + ContainersIpv4Mask)
 		if err != nil {
 			panic(err)
 		}
 
 		containerNets[i].Interface = &iface
-		containersNames[i] = strings.Join(container.Names, ",")
+		containersNames = append(containersNames, strings.Join(container.Names, ","))
 	}
 
 	prompt := promptui.Select{
@@ -48,14 +50,11 @@ func main() {
 		return
 	}
 
-	containerIdx := int64(index)
-
-	// TODO use only filtered containers
-	if containerIdx > int64(len(containerNets)) {
+	if index > len(containerNets) {
 		panic("Container not found")
 	}
 
-	selectedContainer := containerNets[containerIdx]
+	selectedContainer := containerNets[int64(index)]
 
 	fmt.Printf("Names: %s\n", strings.Join(selectedContainer.Names, ","))
 	fmt.Printf("Gateway: %v\n", selectedContainer.Gateway)
@@ -100,7 +99,7 @@ func containers() []Container {
 		panic(err)
 	}
 
-	containerNets := make([]Container, 0)
+	containerNets := make([]Container, 0, len(containers))
 
 	for _, container := range containers {
 		nets := container.NetworkSettings.Networks[container.HostConfig.NetworkMode]

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/google/gopacket"
@@ -11,6 +11,7 @@ import (
 	"github.com/manifoldco/promptui"
 	"log"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -23,17 +24,16 @@ func main() {
 		return
 	}
 
-	containerNets := containers()
-	containersNames := make([]string, 0, len(containerNets))
+	dockerContainers := getDockerContainers()
+	containersNames := make([]string, 0, len(dockerContainers))
 
-	for i, container := range containerNets {
-		//fmt.Printf("%+v\n", container.Names)
+	for i, container := range dockerContainers {
 		iface, err := findIfaceByIPV4(&ifaces, container.Gateway + ContainersIpv4Mask)
 		if err != nil {
 			panic(err)
 		}
 
-		containerNets[i].Interface = &iface
+		dockerContainers[i].Interface = &iface
 		containersNames = append(containersNames, strings.Join(container.Names, ","))
 	}
 
@@ -50,11 +50,11 @@ func main() {
 		return
 	}
 
-	if index > len(containerNets) {
+	if index > len(dockerContainers) {
 		panic("Container not found")
 	}
 
-	selectedContainer := containerNets[int64(index)]
+	selectedContainer := dockerContainers[int64(index)]
 
 	fmt.Printf("Names: %s\n", strings.Join(selectedContainer.Names, ","))
 	fmt.Printf("Gateway: %v\n", selectedContainer.Gateway)
@@ -87,7 +87,7 @@ type Container struct {
 	Interface *net.Interface
 }
 
-func containers() []Container {
+func getDockerContainers() []Container {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -117,14 +117,23 @@ var dist = make(map[string]map[string]int64)
 func sniff(iface *net.Interface) {
 	var (
 		buffer = int32(1600)
-		//filter = "tcp and port 8880"
+		filter string
+		//filter = "tcp and port 8080"
+		//filter = "dst port 5432"
 	)
+
+	reader := bufio.NewReader(os.Stdin)
+	// see https://www.tcpdump.org/manpages/pcap-filter.7.html
+	fmt.Println("Type pcap filter:")
+	filter, err := reader.ReadString('\n')
+	if err != nil {
+		panic(err)
+	}
 
 	if !deviceExists(iface.Name) {
 		log.Fatal("Unable to open device ", iface)
 	}
 
-	// TODO read about buffer
 	handler, err := pcap.OpenLive(iface.Name, buffer, false, pcap.BlockForever)
 
 	if err != nil {
@@ -132,19 +141,19 @@ func sniff(iface *net.Interface) {
 	}
 	defer handler.Close()
 
-	//if err := handler.SetBPFFilter(filter); err != nil {
-	//	log.Fatal(err)
-	//}
+	if err := handler.SetBPFFilter(filter); err != nil {
+		log.Fatal(err)
+	}
 
 	source := gopacket.NewPacketSource(handler, handler.LinkType())
 	for packet := range source.Packets() {
-		harvestFTPCreds(packet)
+		harvestTCPCreds(packet)
 	}
 
 	fmt.Println("Done...")
 }
 
-func harvestFTPCreds(packet gopacket.Packet) {
+func harvestTCPCreds(packet gopacket.Packet) {
 	app := packet.ApplicationLayer()
 	if app != nil {
 		payload := app.Payload()
@@ -153,18 +162,14 @@ func harvestFTPCreds(packet gopacket.Packet) {
 		src := packet.NetworkLayer().NetworkFlow().Src()
 		sport := packet.TransportLayer().TransportFlow().Src()
 
-		spew.Dump(string(payload))
+		fmt.Printf("%s\n", payload)
 
-		// TODO add filters
-		//if dst.String() != "127.0.0.1" {
-		//	return
-		//}
-
-		//// TODO add filters
+		//// TODO add grep
 		//if !bytes.Contains(payload, []byte("SELECT")) {
 		//	return
 		//}
 
+		// TODO group by src AND dst
 		ds := fmt.Sprintf("%v:%v", dst, port)
 		sr := fmt.Sprintf("%v:%v", src, sport)
 

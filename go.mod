@@ -1,4 +1,4 @@
-module dockrat/cmd
+module wirerat/cmd
 
 go 1.15
 

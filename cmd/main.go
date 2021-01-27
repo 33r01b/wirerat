@@ -20,6 +20,10 @@ func run() error {
 		return err
 	}
 
+	if selectedContainer.Interface == nil {
+		return fmt.Errorf("container selection error")
+	}
+
 	fmt.Printf("Names: %s\n", strings.Join(selectedContainer.Names, ","))
 	fmt.Printf("Gateway: %v\n", selectedContainer.Gateway)
 

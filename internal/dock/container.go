@@ -20,7 +20,7 @@ type Container struct {
 	Interface *net.Interface
 }
 
-func FindContainers() (containers []Container, err error) {
+func FindContainers() (containers []*Container, err error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		err = fmt.Errorf("localAddresses: %+v\n", err.Error())
@@ -38,7 +38,7 @@ func FindContainers() (containers []Container, err error) {
 		return
 	}
 
-	containers = make([]Container, 0, len(availableContainers))
+	containers = make([]*Container, 0, len(availableContainers))
 
 	for _, container := range availableContainers {
 		nets := container.NetworkSettings.Networks[container.HostConfig.NetworkMode]
@@ -49,7 +49,7 @@ func FindContainers() (containers []Container, err error) {
 				return nil, err
 			}
 
-			containers = append(containers, Container{
+			containers = append(containers, &Container{
 				Names: container.Names,
 				Gateway: nets.Gateway,
 				Interface: &iface,
@@ -60,7 +60,7 @@ func FindContainers() (containers []Container, err error) {
 	return containers, nil
 }
 
-func SelectContainer() (container Container, err error) {
+func SelectContainer() (container *Container, err error) {
 	containers, err := FindContainers()
 	if err != nil {
 		return

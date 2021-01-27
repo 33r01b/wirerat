@@ -10,12 +10,21 @@ import (
 	"github.com/google/gopacket/pcap"
 	"github.com/manifoldco/promptui"
 	"log"
+	"math"
 	"net"
 	"os"
 	"strings"
 )
 
-const ContainersIpv4Mask string = "/16"
+const ContainersIpv4Mask = "/16"
+const colorReset = "\033[0m"
+const colorRed = "\033[31m"
+const colorGreen = "\033[32m"
+const colorYellow = "\033[33m"
+const colorBlue = "\033[34m"
+const colorPurple = "\033[35m"
+const colorCyan = "\033[36m"
+const colorWhite = "\033[37m"
 
 func main() {
 	ifaces, err := net.Interfaces()
@@ -58,7 +67,6 @@ func main() {
 
 	fmt.Printf("Names: %s\n", strings.Join(selectedContainer.Names, ","))
 	fmt.Printf("Gateway: %v\n", selectedContainer.Gateway)
-	fmt.Printf("LISTEN...\n\n")
 
 	sniff(selectedContainer.Interface)
 }
@@ -112,11 +120,9 @@ func getDockerContainers() []Container {
 	return containerNets
 }
 
-var dist = make(map[string]map[string]int64)
-
 func sniff(iface *net.Interface) {
 	var (
-		buffer = int32(1600)
+		//buffer = int32(65536)
 		filter string
 		//filter = "tcp and port 8080"
 		//filter = "dst port 5432"
@@ -124,7 +130,7 @@ func sniff(iface *net.Interface) {
 
 	reader := bufio.NewReader(os.Stdin)
 	// see https://www.tcpdump.org/manpages/pcap-filter.7.html
-	fmt.Println("Type pcap filter:")
+	fmt.Println(string(colorBlue),"Type pcap filter:", string(colorReset))
 	filter, err := reader.ReadString('\n')
 	if err != nil {
 		panic(err)
@@ -134,7 +140,7 @@ func sniff(iface *net.Interface) {
 		log.Fatal("Unable to open device ", iface)
 	}
 
-	handler, err := pcap.OpenLive(iface.Name, buffer, false, pcap.BlockForever)
+	handler, err := pcap.OpenLive(iface.Name, math.MaxInt32, false, pcap.BlockForever)
 
 	if err != nil {
 		log.Fatal(err)
@@ -144,6 +150,9 @@ func sniff(iface *net.Interface) {
 	if err := handler.SetBPFFilter(filter); err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Println(string(colorRed), "LISTEN...", string(colorReset))
+	fmt.Println()
 
 	source := gopacket.NewPacketSource(handler, handler.LinkType())
 	for packet := range source.Packets() {
@@ -156,33 +165,63 @@ func sniff(iface *net.Interface) {
 func harvestTCPCreds(packet gopacket.Packet) {
 	app := packet.ApplicationLayer()
 	if app != nil {
-		payload := app.Payload()
-		dst := packet.NetworkLayer().NetworkFlow().Dst()
-		port := packet.TransportLayer().TransportFlow().Dst()
-		src := packet.NetworkLayer().NetworkFlow().Src()
-		sport := packet.TransportLayer().TransportFlow().Src()
-
-		fmt.Printf("%s\n", payload)
-
-		//// TODO add grep
-		//if !bytes.Contains(payload, []byte("SELECT")) {
-		//	return
-		//}
-
-		// TODO group by src AND dst
-		ds := fmt.Sprintf("%v:%v", dst, port)
-		sr := fmt.Sprintf("%v:%v", src, sport)
-
-		if _, ok := dist[ds]; ok {
-			dist[ds][sr] = dist[ds][sr] + 1
-		} else {
-			dist[ds] = map[string]int64{
-				sr: 1,
-			}
+		pack := Packet{
+			Src:   Address{
+				host: packet.NetworkLayer().NetworkFlow().Src(),
+				port: packet.TransportLayer().TransportFlow().Src(),
+			},
+			Dst:   Address{
+				host: packet.NetworkLayer().NetworkFlow().Dst(),
+				port: packet.TransportLayer().TransportFlow().Dst(),
+			},
+			Count: 1,
+			Body:  app.Payload(),
 		}
 
-		fmt.Printf("%+v\n\n", dist)
+		route := fmt.Sprintf(
+			"%s%s:%s%s => %s%s:%s%s",
+			colorCyan,
+			pack.Src.Host(),
+			pack.Src.Port(),
+			colorReset,
+			colorPurple,
+			pack.Dst.Host(),
+			pack.Dst.Port(),
+			colorReset,
+		)
+
+		fmt.Printf("%v\n", route)
+		fmt.Println(colorGreen)
+		fmt.Printf("Len: %d\n", len(pack.Body))
+		//fmt.Printf("Src: %s\n", pack.Src)
+		//fmt.Printf("Dst: %s\n", pack.Dst)
+		fmt.Println("Body:\n",colorReset)
+		fmt.Printf("%s\n\n", string(pack.Body))
 	}
+}
+
+type Address struct {
+	host gopacket.Endpoint
+	port gopacket.Endpoint
+}
+
+func (a Address) String() string {
+	return fmt.Sprintf("%s:%s", a.host, a.port)
+}
+
+func (a *Address) Host() gopacket.Endpoint {
+	return a.host
+}
+
+func (a *Address) Port() gopacket.Endpoint {
+	return a.port
+}
+
+type Packet struct {
+	Src   Address
+	Dst   Address
+	Count int64
+	Body  []byte
 }
 
 func deviceExists(name string) bool {

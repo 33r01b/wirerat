@@ -20,7 +20,7 @@ func Sniff(iface *net.Interface) error {
 
 	reader := bufio.NewReader(os.Stdin)
 	// see https://www.tcpdump.org/manpages/pcap-filter.7.html
-	fmt.Println(colorBlue, "Type pcap filter:", colorReset)
+	fmt.Println(colorBlue, "Type pcap filter (optional):", colorReset)
 	filter, err := reader.ReadString('\n')
 	if err != nil {
 		return err

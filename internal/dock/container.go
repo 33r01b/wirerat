@@ -20,14 +20,46 @@ type Container struct {
 	Interface *net.Interface
 }
 
-func FindContainers() (containers []*Container, err error) {
+func SelectContainer(ctx context.Context) (container *Container, err error) {
+	containers, err := FindContainers(ctx)
+	if err != nil {
+		return
+	}
+
+	containersNames := make([]string, 0, len(containers))
+	for _, cont := range containers {
+		containersNames = append(containersNames, strings.Join(cont.Names, ","))
+	}
+
+	prompt := promptui.Select{
+		Label: "Choose container by name",
+		Items: containersNames,
+		Size: 10,
+	}
+
+	index, _, err := prompt.Run()
+
+	if err != nil {
+		return
+	}
+
+	if index > len(containers) {
+		err = errors.New("container not found")
+		return
+	}
+
+	container = containers[index]
+
+	return
+}
+
+func FindContainers(ctx context.Context) (containers []*Container, err error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		err = fmt.Errorf("localAddresses: %+v\n", err.Error())
 		return
 	}
 
-	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return
@@ -58,37 +90,4 @@ func FindContainers() (containers []*Container, err error) {
 	}
 
 	return containers, nil
-}
-
-func SelectContainer() (container *Container, err error) {
-	containers, err := FindContainers()
-	if err != nil {
-		return
-	}
-
-	containersNames := make([]string, 0, len(containers))
-	for _, cont := range containers {
-		containersNames = append(containersNames, strings.Join(cont.Names, ","))
-	}
-
-	prompt := promptui.Select{
-		Label: "Choose container by name",
-		Items: containersNames,
-		Size: 10,
-	}
-
-	index, _, err := prompt.Run()
-
-	if err != nil {
-		return
-	}
-
-	if index > len(containers) {
-		err = errors.New("container not found")
-		return
-	}
-
-	container = containers[index]
-
-	return
 }

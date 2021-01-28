@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -15,7 +16,8 @@ func main() {
 }
 
 func run() error {
-	selectedContainer, err := dock.SelectContainer()
+	ctx := context.Background()
+	selectedContainer, err := dock.SelectContainer(ctx)
 	if err != nil {
 		return err
 	}
